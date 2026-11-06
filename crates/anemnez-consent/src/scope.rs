@@ -7,8 +7,9 @@
 //! system. A command has its own scope, an argv prefix, where a longer prefix wins.
 //!
 //! The host says where the places are ([`Places`]). The project roots are a published fact per
-//! host, written only by the person's act. A cwd counts only when its place is proven: an outside
-//! caller's claimed cwd matches nothing (IRIS.md Q6), so it gets no narrower than home.
+//! host, written only by the person's act. The subject's place is kernel-read, never claimed (User,
+//! 2026-11-06, Q6: Agora reads the harness's cwd from the kernel at accept). When it could not be
+//! proven, the `cwd` and `project` rungs do not apply, and the caller gets no narrower than home.
 
 /// An absolute, canonical path as components (`/tmp/a` is `["tmp", "a"]`; the root is `[]`).
 /// The host canonicalizes. Matching is component-wise, never by string, so `/tmp/beck` never
@@ -57,13 +58,13 @@ impl CanonPath {
     }
 }
 
-/// The subject's working directory, and whether its place is proven (by the mesh's hop record
-/// or the host itself), or only claimed.
+/// Where the subject is: its working directory, and whether that was proven (read from the
+/// kernel by the host or Agora), or could not be.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Cwd {
-    /// The directory.
-    pub path: CanonPath,
-    /// Proven, not merely claimed. An unproven cwd matches nothing.
+pub struct Place {
+    /// The subject's working directory, canonical.
+    pub cwd: CanonPath,
+    /// Proven by the host, never a claim. When false, the cwd and project rungs do not apply.
     pub proven: bool,
 }
 
@@ -74,8 +75,15 @@ pub struct Places {
     pub home: Option<CanonPath>,
     /// The person's project roots on this host.
     pub projects: Vec<CanonPath>,
-    /// The subject's working directory, when it has one.
-    pub cwd: Option<Cwd>,
+    /// Where the subject is, when it has a place at all.
+    pub place: Option<Place>,
+}
+
+impl Places {
+    /// The subject's place, only when it is proven.
+    fn proven_place(&self) -> Option<&Place> {
+        self.place.as_ref().filter(|p| p.proven)
+    }
 }
 
 /// What a call acts on.
@@ -92,7 +100,8 @@ pub enum Target {
 /// What a standing answer covers.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Scope {
-    /// Any of the person's project roots, and everything below.
+    /// Any of the person's project roots, and everything below. Applies only to a subject whose
+    /// place is proven.
     Project,
     /// The subject's proven working directory, and everything below.
     Cwd,
@@ -111,17 +120,18 @@ impl Scope {
     pub fn covering_depth(&self, target: &Target, places: &Places) -> Option<usize> {
         match (self, target) {
             (Self::System, _) => Some(0),
-            (Self::Project, Target::Path(t)) => places
-                .projects
-                .iter()
-                .filter(|root| t.is_under(root))
-                .map(CanonPath::depth)
-                .max(),
+            (Self::Project, Target::Path(t)) => places.proven_place().and_then(|_| {
+                places
+                    .projects
+                    .iter()
+                    .filter(|root| t.is_under(root))
+                    .map(CanonPath::depth)
+                    .max()
+            }),
             (Self::Cwd, Target::Path(t)) => places
-                .cwd
-                .as_ref()
-                .filter(|c| c.proven && t.is_under(&c.path))
-                .map(|c| c.path.depth()),
+                .proven_place()
+                .filter(|p| t.is_under(&p.cwd))
+                .map(|p| p.cwd.depth()),
             (Self::Home, Target::Path(t)) => places
                 .home
                 .as_ref()

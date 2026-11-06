@@ -21,7 +21,7 @@
 
 pub mod scope;
 
-pub use scope::{CanonPath, Cwd, PathError, Places, Scope, Target};
+pub use scope::{CanonPath, PathError, Place, Places, Scope, Target};
 
 /// Milliseconds since the Unix epoch. The host's clock, passed in.
 pub type Timestamp = u64;
@@ -111,7 +111,8 @@ pub enum Origin {
     Person(AnswerRef),
     /// A role's or the host's own rule. A Floor Deny is never lifted.
     Floor,
-    /// Computed by the host for this call (a directory the agent owns). It admits work only.
+    /// Computed by the host for this call (a directory the agent owns). Its Allow admits work
+    /// only; its Deny is a floor, exactly as [`Origin::Floor`]'s.
     Host {
         /// Why the host minted it.
         why: String,
@@ -271,18 +272,19 @@ pub fn decide(input: &Input<'_>) -> Verdict {
         .iter()
         .filter_map(|g| g.applies(input).map(|depth| (g, depth)))
         .collect();
-    if live
-        .iter()
-        .any(|(g, _)| g.origin == Origin::Floor && g.effect == Permission::Deny)
-    {
+    if live.iter().any(|(g, _)| {
+        g.effect == Permission::Deny && matches!(g.origin, Origin::Floor | Origin::Host { .. })
+    }) {
         return Verdict::Deny(DenyWhy::Floor);
     }
     let verdict = match input.guard {
-        Guard::PersonOnly => answered(input).unwrap_or(Verdict::Ask(AskKind::PersonAct)),
-        Guard::PersonAct { max_ms } => answered(input)
+        Guard::PersonOnly => {
+            answered(input, AskKind::PersonAct).unwrap_or(Verdict::Ask(AskKind::PersonAct))
+        }
+        Guard::PersonAct { max_ms } => answered(input, AskKind::PersonAct)
             .or_else(|| persons_confirmation(input, &live, max_ms))
             .unwrap_or(Verdict::Ask(AskKind::PersonAct)),
-        Guard::Work => answered(input)
+        Guard::Work => answered(input, AskKind::WorkGuard)
             .or_else(|| most_specific(&live))
             .unwrap_or(match declared {
                 Permission::Allow => Verdict::Allow(Admitted::Declared),
@@ -296,13 +298,14 @@ pub fn decide(input: &Input<'_>) -> Verdict {
     }
 }
 
-/// The person's answer to this very Ask, when the call carries one.
-fn answered(input: &Input<'_>) -> Option<Verdict> {
+/// The person's answer to this very Ask, when the call carries one. An answer of Ask raises the
+/// guard's own kind of card again.
+fn answered(input: &Input<'_>, kind: AskKind) -> Option<Verdict> {
     let a = input.answering?;
     Some(match a.permission {
         Permission::Allow => Verdict::Allow(Admitted::Answer(a.answer.clone())),
         Permission::Deny => Verdict::Deny(DenyWhy::Stated(Origin::Person(a.answer.clone()))),
-        Permission::Ask => Verdict::Ask(AskKind::PersonAct),
+        Permission::Ask => Verdict::Ask(kind),
     })
 }
 
@@ -358,9 +361,13 @@ pub enum Visibility {
     Index,
 }
 
-/// What `subject` sees of a capability: its own row's visibility when one names it, else the
-/// capability's default. Permission plays no part (the visible-but-denied ruling): a shown,
-/// denied capability is listed, and calling it gets [`DenyWhy`] at once, never an Ask.
+/// What `subject` sees of a capability: its own row's visibility when one names it, else
+/// `default`. Permission plays no part here (the visible-but-denied ruling): a shown, denied
+/// capability is listed, and calling it gets [`DenyWhy`] at once, never an Ask.
+///
+/// The ruling's default is that a denied capability stays hidden, so the HOST passes
+/// `default = Visibility::Hidden` when [`decide`] would deny the subject, and the capability's
+/// declared visibility otherwise. Only a row that names the subject shows a denied capability.
 #[must_use]
 pub fn presence(
     subject: &Subject,

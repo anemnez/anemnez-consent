@@ -61,8 +61,8 @@ fn places() -> Places {
             p("/Users/jimmie/personal/anemnez"),
             p("/Users/jimmie/work/ybor"),
         ],
-        cwd: Some(Cwd {
-            path: p("/Users/jimmie/scratch/adhoc"),
+        place: Some(Place {
+            cwd: p("/Users/jimmie/scratch/adhoc"),
             proven: true,
         }),
     }
@@ -567,8 +567,8 @@ fn a_lane_never_matches_and_a_path_never_matches_by_string() {
         person("beck"),
     );
     let beck = Places {
-        cwd: Some(Cwd {
-            path: p("/tmp/beck"),
+        place: Some(Place {
+            cwd: p("/tmp/beck"),
             proven: true,
         }),
         ..places()
@@ -592,8 +592,8 @@ fn a_lane_never_matches_and_a_path_never_matches_by_string() {
 #[test]
 fn a_cwd_inside_a_project_beats_the_project() {
     let inside = Places {
-        cwd: Some(Cwd {
-            path: p("/Users/jimmie/personal/anemnez/scratch"),
+        place: Some(Place {
+            cwd: p("/Users/jimmie/personal/anemnez/scratch"),
             proven: true,
         }),
         ..places()
@@ -634,10 +634,10 @@ fn a_cwd_inside_a_project_beats_the_project() {
 /// An outside caller's claimed cwd matches nothing until its place is proven (IRIS.md Q6): it
 /// gets no narrower than home.
 #[test]
-fn an_unproven_cwd_matches_nothing() {
+fn an_unproven_place_widens_nothing_past_home() {
     let claimed = Places {
-        cwd: Some(Cwd {
-            path: p("/Users/jimmie/scratch/adhoc"),
+        place: Some(Place {
+            cwd: p("/Users/jimmie/scratch/adhoc"),
             proven: false,
         }),
         ..places()
@@ -651,5 +651,183 @@ fn an_unproven_cwd_matches_nothing() {
         &rules,
         &claimed,
     );
-    assert_eq!(v, Verdict::Ask(AskKind::WorkGuard), "only home covers it");
+    assert_eq!(
+        v,
+        Verdict::Ask(AskKind::WorkGuard),
+        "neither cwd nor project applies: only home covers it"
+    );
+}
+
+/// A project root outside home ranks by its own depth: deeper than system, and home does not
+/// cover it at all.
+#[test]
+fn a_project_root_outside_home_ranks_by_its_own_depth() {
+    let outside = Places {
+        projects: vec![p("/Volumes/AIML/src")],
+        ..places()
+    };
+    let rules = vec![
+        grant(
+            every_agent(),
+            fs_write(),
+            Scope::Project,
+            Permission::Allow,
+            person("project"),
+        ),
+        grant(
+            every_agent(),
+            fs_write(),
+            Scope::System,
+            Permission::Deny,
+            person("system"),
+        ),
+    ];
+    let v = decide_with(
+        &agent("wren"),
+        &fs_write(),
+        &Target::Path(p("/Volumes/AIML/src/x")),
+        Guard::Work,
+        &rules,
+        &outside,
+    );
+    assert_eq!(v, Verdict::Allow(Admitted::Grant(person("project"))));
+}
+
+/// A host's Deny is a floor: a narrower person Allow never out-ranks it.
+#[test]
+fn a_narrower_person_allow_never_outranks_a_host_deny() {
+    let rules = vec![
+        grant(
+            every_agent(),
+            fs_write(),
+            Scope::Home,
+            Permission::Deny,
+            Origin::Host {
+                why: "sealed".into(),
+            },
+        ),
+        grant(
+            every_agent(),
+            fs_write(),
+            Scope::Cwd,
+            Permission::Allow,
+            person("cwd"),
+        ),
+    ];
+    let v = decide_with(
+        &agent("wren"),
+        &fs_write(),
+        &Target::Path(p("/Users/jimmie/scratch/adhoc/x")),
+        Guard::Work,
+        &rules,
+        &places(),
+    );
+    assert_eq!(v, Verdict::Deny(DenyWhy::Floor));
+}
+
+/// D's case: with the cwd at home itself, a project inside home is still the deeper root.
+#[test]
+fn a_cwd_at_home_does_not_outrank_a_project_inside_it() {
+    let at_home = Places {
+        place: Some(Place {
+            cwd: p("/Users/jimmie"),
+            proven: true,
+        }),
+        ..places()
+    };
+    let rules = vec![
+        grant(
+            every_agent(),
+            fs_write(),
+            Scope::Project,
+            Permission::Allow,
+            person("project"),
+        ),
+        grant(
+            every_agent(),
+            fs_write(),
+            Scope::Cwd,
+            Permission::Ask,
+            person("cwd"),
+        ),
+        grant(
+            every_agent(),
+            fs_write(),
+            Scope::Home,
+            Permission::Ask,
+            person("home"),
+        ),
+    ];
+    let v = decide_with(
+        &agent("wren"),
+        &fs_write(),
+        &Target::Path(p("/Users/jimmie/personal/anemnez/x")),
+        Guard::Work,
+        &rules,
+        &at_home,
+    );
+    assert_eq!(v, Verdict::Allow(Admitted::Grant(person("project"))));
+}
+
+/// An answer of Ask raises the guard's own kind of card again: a work guard never renders as a
+/// confirmation.
+#[test]
+fn an_answer_of_ask_keeps_the_guards_kind() {
+    let t = Target::Path(p("/tmp/x"));
+    let answering = Answering {
+        permission: Permission::Ask,
+        answer: AnswerRef("a".into()),
+    };
+    let mut input = Input {
+        subject: &agent("wren"),
+        capability: &fs_write(),
+        target: &t,
+        declared: Some(Permission::Ask),
+        guard: Guard::Work,
+        grants: &[],
+        answering: Some(&answering),
+        places: &places(),
+        session: None,
+        task: None,
+        now: NOW,
+        skew_ms: 0,
+        attended: true,
+        can_park: true,
+    };
+    assert_eq!(decide(&input), Verdict::Ask(AskKind::WorkGuard));
+    input.guard = Guard::PersonOnly;
+    assert_eq!(decide(&input), Verdict::Ask(AskKind::PersonAct));
+}
+
+/// The host's half of visible-but-denied: a denied capability defaults to Hidden, and only a row
+/// naming the subject shows it; the call still refuses.
+#[test]
+fn a_denied_capability_is_hidden_unless_a_row_shows_it() {
+    let me = agent("wren");
+    let rules = vec![grant(
+        every_agent(),
+        fs_write(),
+        Scope::System,
+        Permission::Deny,
+        person("no"),
+    )];
+    let v = decide_with(
+        &me,
+        &fs_write(),
+        &Target::Path(p("/tmp/x")),
+        Guard::Work,
+        &rules,
+        &places(),
+    );
+    let default = if matches!(v, Verdict::Deny(_)) {
+        Visibility::Hidden
+    } else {
+        Visibility::Full
+    };
+    assert_eq!(presence(&me, default, &[]), Visibility::Hidden);
+    assert_eq!(
+        presence(&me, default, &[(every_agent(), Visibility::Index)]),
+        Visibility::Index
+    );
+    assert_eq!(v, Verdict::Deny(DenyWhy::Stated(person("no"))));
 }

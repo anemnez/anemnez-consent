@@ -18,12 +18,14 @@ four path scopes `project`, `cwd`, `home` and `system` (User, 2026-11-06). At eq
 beats Ask beats Allow.
 
 <!-- claim: a-floor-is-never-lifted -->
-A role's or the host's Deny (`Origin::Floor`) refuses whatever narrower answer exists.
+A role's or the host's Deny (`Origin::Floor`, or a `Origin::Host` grant that denies) refuses
+whatever narrower answer exists.
 
 <!-- claim: an-unproven-place-authorizes-nothing -->
 A Grant for another class of subject admits nothing. A lane never matches: it names a caller and
-never authorizes one. A claimed, unproven cwd matches nothing, so such a caller gets no narrower
-than home. Paths match component-wise, never by string.
+never authorizes one. The subject's place is kernel-read by the host or Agora, never claimed (User,
+2026-11-06, Q6). When it could not be proven, the `cwd` and `project` rungs do not apply, so the
+caller gets no narrower than home. Paths match component-wise, never by string.
 
 <!-- claim: minds-are-never-blocked -->
 An Ask is a normal outcome that an asker may park on (User, 2026-11-06). It is refused at once
@@ -31,7 +33,12 @@ An Ask is a normal outcome that an asker may park on (User, 2026-11-06). It is r
 
 <!-- claim: a-denied-call-never-raises-an-ask -->
 Visibility and permission are independent: a capability may be shown and denied, and calling it
-refuses at once, never asking.
+refuses at once, never asking. A denied capability is hidden unless a row naming the subject shows
+it (the host passes `Hidden` as the default when `decide` would deny).
+
+<!-- claim: an-ask-keeps-its-guards-kind -->
+An Ask is raised as its guard's kind of card: a confirmation for the person's act, a grant card
+(scopes and lifetimes) for a work guard, also when the person's answer was itself "ask me again".
 
 <!-- claim: a-grant-lives-as-long-as-it-says -->
 A Grant applies only while its lifetime holds: its session, its task, or until its time plus the

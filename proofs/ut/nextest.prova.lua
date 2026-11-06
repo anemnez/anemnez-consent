@@ -85,15 +85,24 @@ spoken_for("the-deepest-root-wins", {
 	"tests::the_users_worked_example_scopes_agents_by_risk",
 	"tests::a_cwd_inside_a_project_beats_the_project",
 	"tests::at_equal_specificity_a_deny_wins",
+	"tests::a_project_root_outside_home_ranks_by_its_own_depth",
+	"tests::a_cwd_at_home_does_not_outrank_a_project_inside_it",
 })
-spoken_for("a-floor-is-never-lifted", { "tests::a_floor_deny_is_never_lifted_by_a_narrower_allow" })
+spoken_for("a-floor-is-never-lifted", {
+	"tests::a_floor_deny_is_never_lifted_by_a_narrower_allow",
+	"tests::a_narrower_person_allow_never_outranks_a_host_deny",
+})
 spoken_for("an-unproven-place-authorizes-nothing", {
 	"tests::a_grant_for_another_class_admits_nothing",
 	"tests::a_lane_never_matches_and_a_path_never_matches_by_string",
-	"tests::an_unproven_cwd_matches_nothing",
+	"tests::an_unproven_place_widens_nothing_past_home",
 })
 spoken_for("minds-are-never-blocked", { "tests::an_unattended_ask_refuses_only_when_the_asker_cannot_park" })
-spoken_for("a-denied-call-never-raises-an-ask", { "tests::a_shown_denied_capability_refuses_and_never_asks" })
+spoken_for("a-denied-call-never-raises-an-ask", {
+	"tests::a_shown_denied_capability_refuses_and_never_asks",
+	"tests::a_denied_capability_is_hidden_unless_a_row_shows_it",
+})
+spoken_for("an-ask-keeps-its-guards-kind", { "tests::an_answer_of_ask_keeps_the_guards_kind" })
 spoken_for("a-grant-lives-as-long-as-it-says", {
 	"tests::an_until_grant_expires_after_its_time_plus_skew",
 	"tests::a_session_grant_from_another_session_admits_nothing",
