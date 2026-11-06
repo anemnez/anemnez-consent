@@ -1,0 +1,11 @@
+# Artichoke's Cargo registry (Fabric): where this crate is published, by Herald, on each green
+# landing. One address on every host: the local Artichoke. Reads need a token
+# (`[registries.artichoke] token` in ~/.cargo/credentials.toml, minted on the host's own Artichoke
+# with `artichoke token new --scope read:crates`), never copied between hosts.
+[registries.artichoke]
+index = "sparse+http://127.0.0.1:7787/crates/index/"
+
+# Cargo refuses an authenticated registry unless a credential provider is on; `cargo:token` reads
+# that file.
+[registry]
+global-credential-providers = ["cargo:token"]

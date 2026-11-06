@@ -1,0 +1,13 @@
+[package]
+name = "anemnez-consent"
+description = "Iris's decision engine: who may do what, decided purely from what the person said"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
