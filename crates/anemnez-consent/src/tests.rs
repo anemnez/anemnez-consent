@@ -65,6 +65,7 @@ fn places() -> Places {
             cwd: p("/Users/jimmie/scratch/adhoc"),
             proven: true,
         }),
+        agent_home: Some(p("/Users/jimmie/Anemnez/ENCOM/agents/wren")),
     }
 }
 
@@ -1020,4 +1021,63 @@ fn a_deny_answered_from_the_card_ranks_like_an_allow() {
     ];
     let v = decide_with(&me, &fs_write(), &t, Guard::Work, &rules, &ssh);
     assert_eq!(v, Verdict::Deny(DenyWhy::Stated(person("never ssh"))));
+}
+
+/// Agent Home is the agent's own place, theirs to manage (User, 2026-11-06): the host's default
+/// Allow there admits work even under a system Deny, since it is the deeper root, and it needs no
+/// proven place.
+#[test]
+fn an_agents_own_home_is_its_to_manage() {
+    let unplaced = Places {
+        place: None,
+        ..places()
+    };
+    let rules = vec![
+        grant(
+            every_agent(),
+            fs_write(),
+            Scope::AgentHome,
+            Permission::Allow,
+            Origin::Host {
+                why: "the agent's own home".into(),
+            },
+        ),
+        grant(
+            every_agent(),
+            fs_write(),
+            Scope::Home,
+            Permission::Ask,
+            person("home"),
+        ),
+        grant(
+            every_agent(),
+            fs_write(),
+            Scope::System,
+            Permission::Deny,
+            person("system"),
+        ),
+    ];
+    let mine = Target::Path(p("/Users/jimmie/Anemnez/ENCOM/agents/wren/notes.md"));
+    let v = decide_with(
+        &agent("wren"),
+        &fs_write(),
+        &mine,
+        Guard::Work,
+        &rules,
+        &unplaced,
+    );
+    assert!(
+        matches!(v, Verdict::Allow(Admitted::Grant(Origin::Host { .. }))),
+        "{v:?}"
+    );
+    let elsewhere = Target::Path(p("/Users/jimmie/Documents/x"));
+    let v = decide_with(
+        &agent("wren"),
+        &fs_write(),
+        &elsewhere,
+        Guard::Work,
+        &rules,
+        &unplaced,
+    );
+    assert_eq!(v, Verdict::Ask(AskKind::WorkGuard));
 }

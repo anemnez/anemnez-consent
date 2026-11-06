@@ -14,8 +14,10 @@ A standing, session, task or host Grant never admits it.
 
 <!-- claim: the-deepest-root-wins -->
 Among the Grants that cover a call, the one whose containing root is deepest wins, across the
-four path scopes `project`, `cwd`, `home` and `system` (User, 2026-11-06). At equal depth Deny
-beats Ask beats Allow.
+path scopes `agent_home` (the agent's own place, its to manage, Allow by the host's default),
+`cwd` (where the person put the agent: changing it is the person's act, so it is a root the
+person fixed), `project`, `home` and `system` (User, 2026-11-06). At equal depth Deny beats Ask
+beats Allow.
 
 <!-- claim: a-floor-is-never-lifted -->
 A role's or the host's Deny (`Origin::Floor`, or a `Origin::Host` grant that denies) refuses

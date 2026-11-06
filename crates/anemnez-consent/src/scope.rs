@@ -1,10 +1,12 @@
 //! What an answer covers, and how specific it is.
 //!
-//! The person's four path scopes (User, 2026-11-06): `project` (any directory the person's
-//! project roots name), `cwd` (the subject's current working directory and below), `home`, and
-//! `system` (everything). An action matches every scope that contains its path, and the DEEPEST
-//! containing root wins, so a cwd inside a project beats the project, and both beat home and
-//! system. A command has its own scope, an argv prefix, where a longer prefix wins.
+//! The person's path scopes (User, 2026-11-06): `agent_home` (the agent's own scratch place,
+//! theirs to manage), `cwd` (where the person put the agent: changing it is the person's act, so
+//! it is a root the person fixed), `project` (any of the person's project roots, the way to widen
+//! scope across the file system), `home`, and `system` (everything). An action matches every
+//! scope that contains its path, and the DEEPEST containing root wins, so a cwd inside a project
+//! beats the project, and both beat home and system. A command has its own scope, an argv prefix,
+//! where a longer prefix wins.
 //!
 //! The host says where the places are ([`Places`]). The project roots are a published fact per
 //! host, written only by the person's act. The subject's place is kernel-read, never claimed (User,
@@ -77,6 +79,8 @@ pub struct Places {
     pub projects: Vec<CanonPath>,
     /// Where the subject is, when it has a place at all.
     pub place: Option<Place>,
+    /// The agent's own place, theirs to manage: the host knows it, so it needs no proof.
+    pub agent_home: Option<CanonPath>,
 }
 
 impl Places {
@@ -100,6 +104,9 @@ pub enum Target {
 /// What a standing answer covers.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Scope {
+    /// The agent's own home, and everything below. The host's default for it is an Allow (a
+    /// Host grant): it is the agent's to manage.
+    AgentHome,
     /// Any of the person's project roots, and everything below. Applies only to a subject whose
     /// place is proven.
     Project,
@@ -128,6 +135,11 @@ impl Scope {
                     .map(CanonPath::depth)
                     .max()
             }),
+            (Self::AgentHome, Target::Path(t)) => places
+                .agent_home
+                .as_ref()
+                .filter(|h| t.is_under(h))
+                .map(CanonPath::depth),
             (Self::Cwd, Target::Path(t)) => places
                 .proven_place()
                 .filter(|p| t.is_under(&p.cwd))
@@ -140,7 +152,9 @@ impl Scope {
             (Self::Command(prefix), Target::Command(argv)) => {
                 (!prefix.is_empty() && argv.starts_with(prefix)).then_some(prefix.len())
             }
-            (Self::Project | Self::Cwd | Self::Home | Self::Command(_), _) => None,
+            (Self::AgentHome | Self::Project | Self::Cwd | Self::Home | Self::Command(_), _) => {
+                None
+            }
         }
     }
 }

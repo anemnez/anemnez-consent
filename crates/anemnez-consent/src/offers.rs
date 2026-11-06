@@ -70,14 +70,14 @@ pub fn offers(input: &Input<'_>, kind: AskKind, timed_ms: &[u64]) -> Offers {
 
 /// Every scope that covers the call, deepest containing root first. At equal depth (one root
 /// under two names, say a cwd that is a project root) only the more particular is offered: the
-/// subject's cwd, then a project, then home.
+/// agent's home, then its cwd, then a project, then home.
 fn covering_scopes(input: &Input<'_>) -> Vec<Scope> {
     let mut candidates: Vec<Scope> = match input.target {
         Target::Command(argv) => (1..=argv.len())
             .rev()
             .map(|n| Scope::Command(argv[..n].to_vec()))
             .collect(),
-        Target::Path(_) => vec![Scope::Cwd, Scope::Project, Scope::Home],
+        Target::Path(_) => vec![Scope::AgentHome, Scope::Cwd, Scope::Project, Scope::Home],
         Target::None => Vec::new(),
     };
     candidates.push(Scope::System);

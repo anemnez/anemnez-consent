@@ -87,6 +87,7 @@ spoken_for("the-deepest-root-wins", {
 	"tests::at_equal_specificity_a_deny_wins",
 	"tests::a_project_root_outside_home_ranks_by_its_own_depth",
 	"tests::a_cwd_at_home_does_not_outrank_a_project_inside_it",
+	"tests::an_agents_own_home_is_its_to_manage",
 })
 spoken_for("a-floor-is-never-lifted", {
 	"tests::a_floor_deny_is_never_lifted_by_a_narrower_allow",
