@@ -22,7 +22,7 @@
 pub mod offers;
 pub mod scope;
 
-pub use offers::{OfferedLifetime, Offers, offers};
+pub use offers::{DEFAULT_TIMED_MS, OfferedLifetime, Offers, offers};
 pub use scope::{CanonPath, PathError, Place, Places, Scope, Target};
 
 /// Milliseconds since the Unix epoch. The host's clock, passed in.

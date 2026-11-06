@@ -7,10 +7,12 @@
 //! pre-selected.
 
 use crate::scope::{Scope, Target};
-use crate::{AskKind, Guard, Input, Timestamp};
+use crate::{AskKind, Guard, Input, Permission, Timestamp};
 
-/// How long the dogfood slice's longest lifetime runs: "for 8 hours".
-const FOR_HOURS_MS: u64 = 8 * 60 * 60 * 1000;
+/// The timed lifetimes a card offers when the host names none: 15 minutes, an hour, 8 hours.
+/// The User, 2026-11-06: "ask in Home, and I may allow it for a few minutes". The set is the
+/// host's to tune, so the person can change it later.
+pub const DEFAULT_TIMED_MS: [u64; 3] = [15 * 60 * 1000, 60 * 60 * 1000, 8 * 60 * 60 * 1000];
 
 /// A lifetime a card offers, before the person picks it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,12 +30,15 @@ pub enum OfferedLifetime {
 /// What a card offers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Offers {
-    /// A grant card for a work guard: the scopes that cover the call, deepest root first, and the
-    /// lifetimes, shortest first.
+    /// A grant card for a work guard: Allow or Deny, at the scopes that cover the call (deepest
+    /// root first), for the lifetimes (once, then the timed ones shortest first, then the task
+    /// and the session).
     Grant {
+        /// Allow first, the default; Deny at any of the same scopes ("never in ~/.ssh").
+        answers: Vec<Permission>,
         /// Narrowest first; the first is the default.
         scopes: Vec<Scope>,
-        /// Shortest first; the first is the default.
+        /// Once first, the default.
         lifetimes: Vec<OfferedLifetime>,
     },
     /// A confirmation for the person's act: Confirm or Cancel, and, where the descriptor allows,
@@ -44,9 +49,10 @@ pub enum Offers {
     },
 }
 
-/// The card for an Ask of `kind` on `input`.
+/// The card for an Ask of `kind` on `input`, with `timed_ms` the timed lifetimes the host offers
+/// ([`DEFAULT_TIMED_MS`] when it names none).
 #[must_use]
-pub fn offers(input: &Input<'_>, kind: AskKind) -> Offers {
+pub fn offers(input: &Input<'_>, kind: AskKind, timed_ms: &[u64]) -> Offers {
     match (kind, input.guard) {
         (AskKind::PersonAct, Guard::PersonAct { max_ms }) => Offers::Confirm {
             for_until: (max_ms > 0).then(|| input.now.saturating_add(max_ms)),
@@ -55,8 +61,9 @@ pub fn offers(input: &Input<'_>, kind: AskKind) -> Offers {
             Offers::Confirm { for_until: None }
         }
         (AskKind::WorkGuard, _) => Offers::Grant {
+            answers: vec![Permission::Allow, Permission::Deny],
             scopes: covering_scopes(input),
-            lifetimes: lifetimes(input),
+            lifetimes: lifetimes(input, timed_ms),
         },
     }
 }
@@ -97,17 +104,22 @@ fn covering_scopes(input: &Input<'_>) -> Vec<Scope> {
     out
 }
 
-/// The lifetimes, shortest first: once, the task, the session, then eight hours.
-fn lifetimes(input: &Input<'_>) -> Vec<OfferedLifetime> {
+/// The lifetimes: once, the timed ones shortest first, then the task and the session.
+fn lifetimes(input: &Input<'_>, timed_ms: &[u64]) -> Vec<OfferedLifetime> {
+    let mut timed: Vec<u64> = timed_ms.iter().copied().filter(|ms| *ms > 0).collect();
+    timed.sort_unstable();
+    timed.dedup();
     let mut out = vec![OfferedLifetime::Once];
+    out.extend(
+        timed
+            .into_iter()
+            .map(|ms| OfferedLifetime::Until(input.now.saturating_add(ms))),
+    );
     if let Some(task) = input.task {
         out.push(OfferedLifetime::Task(task.to_string()));
     }
     if let Some(session) = input.session {
         out.push(OfferedLifetime::Session(session.to_string()));
     }
-    out.push(OfferedLifetime::Until(
-        input.now.saturating_add(FOR_HOURS_MS),
-    ));
     out
 }

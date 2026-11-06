@@ -45,8 +45,10 @@ A Grant applies only while its lifetime holds: its session, its task, or until i
 host's clock skew. Nothing by an unregistered name is admitted, above every Grant.
 
 <!-- claim: a-card-offers-narrowest-first -->
-A work guard's card offers the scopes that cover the call, deepest containing root first (one root
-under two names offered once, as the more particular), and the lifetimes once, task, session, then
-eight hours, shortest first. The first of each is the default, so nothing wider is ever
-pre-selected. A person's act gets a confirmation card: once, plus "for N" only where its
+A work guard's card offers Allow or Deny, at the scopes that cover the call, deepest containing root
+first (one root under two names offered once, as the more particular), for the lifetimes once, then
+the host's timed ones shortest first (default 15 minutes, an hour, 8 hours: "I may allow it for a
+few minutes"), then the task and the session. The first of each is the default, so nothing wider
+is ever pre-selected. A Deny from the card ranks by depth like an Allow, so "never in ~/.ssh" is one
+click. A person's act gets a confirmation card: once, plus "for N" only where its
 descriptor's bound allows.

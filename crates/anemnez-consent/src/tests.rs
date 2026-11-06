@@ -866,20 +866,23 @@ fn a_work_card_offers_the_covering_scopes_narrowest_first() {
     let (me, cap) = (agent("wren"), fs_write());
     let input = ask_input(&t, &pl, Guard::Work, &me, &cap);
     assert_eq!(
-        offers(&input, AskKind::WorkGuard),
+        offers(&input, AskKind::WorkGuard, &DEFAULT_TIMED_MS),
         Offers::Grant {
+            answers: vec![Permission::Allow, Permission::Deny],
             scopes: vec![Scope::Cwd, Scope::Home, Scope::System],
             lifetimes: vec![
                 OfferedLifetime::Once,
-                OfferedLifetime::Session("s1".into()),
+                OfferedLifetime::Until(NOW + 15 * 60 * 1000),
+                OfferedLifetime::Until(NOW + 60 * 60 * 1000),
                 OfferedLifetime::Until(NOW + 8 * 60 * 60 * 1000),
+                OfferedLifetime::Session("s1".into()),
             ],
         },
         "not in a project, so no project rung"
     );
     let in_project = Target::Path(p("/Users/jimmie/personal/anemnez/x/y"));
     let input = ask_input(&in_project, &pl, Guard::Work, &me, &cap);
-    let Offers::Grant { scopes, .. } = offers(&input, AskKind::WorkGuard) else {
+    let Offers::Grant { scopes, .. } = offers(&input, AskKind::WorkGuard, &DEFAULT_TIMED_MS) else {
         panic!("a grant card");
     };
     assert_eq!(scopes, vec![Scope::Project, Scope::Home, Scope::System]);
@@ -898,7 +901,7 @@ fn one_root_under_two_names_is_offered_once() {
     let t = Target::Path(p("/Users/jimmie/personal/anemnez/x"));
     let (me, cap) = (agent("wren"), fs_write());
     let input = ask_input(&t, &at_root, Guard::Work, &me, &cap);
-    let Offers::Grant { scopes, .. } = offers(&input, AskKind::WorkGuard) else {
+    let Offers::Grant { scopes, .. } = offers(&input, AskKind::WorkGuard, &DEFAULT_TIMED_MS) else {
         panic!("a grant card");
     };
     assert_eq!(scopes, vec![Scope::Cwd, Scope::Home, Scope::System]);
@@ -911,7 +914,7 @@ fn a_command_card_offers_its_argv_prefixes() {
     let pl = places();
     let (me, cap) = (agent("wren"), fs_write());
     let input = ask_input(&t, &pl, Guard::Work, &me, &cap);
-    let Offers::Grant { scopes, .. } = offers(&input, AskKind::WorkGuard) else {
+    let Offers::Grant { scopes, .. } = offers(&input, AskKind::WorkGuard, &DEFAULT_TIMED_MS) else {
         panic!("a grant card");
     };
     assert_eq!(
@@ -934,19 +937,87 @@ fn a_persons_act_card_is_a_confirmation() {
     let five = 5 * 60 * 1000;
     let input = ask_input(&t, &pl, Guard::PersonAct { max_ms: five }, &me, &cap);
     assert_eq!(
-        offers(&input, AskKind::PersonAct),
+        offers(&input, AskKind::PersonAct, &DEFAULT_TIMED_MS),
         Offers::Confirm {
             for_until: Some(NOW + five)
         }
     );
     let input = ask_input(&t, &pl, Guard::PersonAct { max_ms: 0 }, &me, &cap);
     assert_eq!(
-        offers(&input, AskKind::PersonAct),
+        offers(&input, AskKind::PersonAct, &DEFAULT_TIMED_MS),
         Offers::Confirm { for_until: None }
     );
     let input = ask_input(&t, &pl, Guard::PersonOnly, &me, &cap);
     assert_eq!(
-        offers(&input, AskKind::PersonAct),
+        offers(&input, AskKind::PersonAct, &DEFAULT_TIMED_MS),
         Offers::Confirm { for_until: None }
     );
+}
+
+/// The timed lifetimes are the host's: a few minutes when the person wants it, in order, with
+/// nonsense (zero, duplicates) dropped.
+#[test]
+fn the_timed_lifetimes_are_the_hosts_and_come_shortest_first() {
+    let t = Target::Path(p("/Users/jimmie/x"));
+    let pl = places();
+    let (me, cap) = (agent("wren"), fs_write());
+    let mut input = ask_input(&t, &pl, Guard::Work, &me, &cap);
+    input.task = Some("t1");
+    let Offers::Grant { lifetimes, .. } =
+        offers(&input, AskKind::WorkGuard, &[300_000, 0, 60_000, 300_000])
+    else {
+        panic!("a grant card");
+    };
+    assert_eq!(
+        lifetimes,
+        vec![
+            OfferedLifetime::Once,
+            OfferedLifetime::Until(NOW + 60_000),
+            OfferedLifetime::Until(NOW + 300_000),
+            OfferedLifetime::Task("t1".into()),
+            OfferedLifetime::Session("s1".into()),
+        ]
+    );
+}
+
+/// "never in ~/.ssh" is one click: a person's Deny at a scope, ranked by depth like an Allow, so
+/// it beats a broader Allow.
+#[test]
+fn a_deny_answered_from_the_card_ranks_like_an_allow() {
+    let ssh = Places {
+        place: Some(Place {
+            cwd: p("/Users/jimmie/.ssh"),
+            proven: true,
+        }),
+        ..places()
+    };
+    let t = Target::Path(p("/Users/jimmie/.ssh/id_ed25519"));
+    let (me, cap) = (agent("wren"), fs_write());
+    let input = ask_input(&t, &ssh, Guard::Work, &me, &cap);
+    let Offers::Grant {
+        answers, scopes, ..
+    } = offers(&input, AskKind::WorkGuard, &DEFAULT_TIMED_MS)
+    else {
+        panic!("a grant card");
+    };
+    assert_eq!(answers, vec![Permission::Allow, Permission::Deny]);
+    assert_eq!(scopes[0], Scope::Cwd, "the narrowest, ~/.ssh itself");
+    let rules = vec![
+        grant(
+            every_agent(),
+            fs_write(),
+            Scope::Home,
+            Permission::Allow,
+            person("home"),
+        ),
+        grant(
+            every_agent(),
+            fs_write(),
+            scopes[0].clone(),
+            Permission::Deny,
+            person("never ssh"),
+        ),
+    ];
+    let v = decide_with(&me, &fs_write(), &t, Guard::Work, &rules, &ssh);
+    assert_eq!(v, Verdict::Deny(DenyWhy::Stated(person("never ssh"))));
 }

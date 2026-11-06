@@ -113,4 +113,6 @@ spoken_for("a-card-offers-narrowest-first", {
 	"tests::one_root_under_two_names_is_offered_once",
 	"tests::a_command_card_offers_its_argv_prefixes",
 	"tests::a_persons_act_card_is_a_confirmation",
+	"tests::the_timed_lifetimes_are_the_hosts_and_come_shortest_first",
+	"tests::a_deny_answered_from_the_card_ranks_like_an_allow",
 })
