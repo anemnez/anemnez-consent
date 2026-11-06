@@ -108,3 +108,9 @@ spoken_for("a-grant-lives-as-long-as-it-says", {
 	"tests::a_session_grant_from_another_session_admits_nothing",
 	"tests::nothing_registered_is_refused_above_everything",
 })
+spoken_for("a-card-offers-narrowest-first", {
+	"tests::a_work_card_offers_the_covering_scopes_narrowest_first",
+	"tests::one_root_under_two_names_is_offered_once",
+	"tests::a_command_card_offers_its_argv_prefixes",
+	"tests::a_persons_act_card_is_a_confirmation",
+})

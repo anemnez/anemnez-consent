@@ -831,3 +831,122 @@ fn a_denied_capability_is_hidden_unless_a_row_shows_it() {
     );
     assert_eq!(v, Verdict::Deny(DenyWhy::Stated(person("no"))));
 }
+
+fn ask_input<'a>(
+    target: &'a Target,
+    places: &'a Places,
+    guard: Guard,
+    subject: &'a Subject,
+    cap: &'a Capability,
+) -> Input<'a> {
+    Input {
+        subject,
+        capability: cap,
+        target,
+        declared: Some(Permission::Ask),
+        guard,
+        grants: &[],
+        answering: None,
+        places,
+        session: Some("s1"),
+        task: None,
+        now: NOW,
+        skew_ms: 0,
+        attended: true,
+        can_park: true,
+    }
+}
+
+/// A grant card offers the scopes that cover the call, deepest first, and the lifetimes,
+/// shortest first. The first of each is the default, so nothing wide is ever pre-selected.
+#[test]
+fn a_work_card_offers_the_covering_scopes_narrowest_first() {
+    let t = Target::Path(p("/Users/jimmie/scratch/adhoc/notes.md"));
+    let pl = places();
+    let (me, cap) = (agent("wren"), fs_write());
+    let input = ask_input(&t, &pl, Guard::Work, &me, &cap);
+    assert_eq!(
+        offers(&input, AskKind::WorkGuard),
+        Offers::Grant {
+            scopes: vec![Scope::Cwd, Scope::Home, Scope::System],
+            lifetimes: vec![
+                OfferedLifetime::Once,
+                OfferedLifetime::Session("s1".into()),
+                OfferedLifetime::Until(NOW + 8 * 60 * 60 * 1000),
+            ],
+        },
+        "not in a project, so no project rung"
+    );
+    let in_project = Target::Path(p("/Users/jimmie/personal/anemnez/x/y"));
+    let input = ask_input(&in_project, &pl, Guard::Work, &me, &cap);
+    let Offers::Grant { scopes, .. } = offers(&input, AskKind::WorkGuard) else {
+        panic!("a grant card");
+    };
+    assert_eq!(scopes, vec![Scope::Project, Scope::Home, Scope::System]);
+}
+
+/// A cwd that is itself a project root is one root: the card offers it once, as the cwd.
+#[test]
+fn one_root_under_two_names_is_offered_once() {
+    let at_root = Places {
+        place: Some(Place {
+            cwd: p("/Users/jimmie/personal/anemnez"),
+            proven: true,
+        }),
+        ..places()
+    };
+    let t = Target::Path(p("/Users/jimmie/personal/anemnez/x"));
+    let (me, cap) = (agent("wren"), fs_write());
+    let input = ask_input(&t, &at_root, Guard::Work, &me, &cap);
+    let Offers::Grant { scopes, .. } = offers(&input, AskKind::WorkGuard) else {
+        panic!("a grant card");
+    };
+    assert_eq!(scopes, vec![Scope::Cwd, Scope::Home, Scope::System]);
+}
+
+/// A command offers its own argv prefixes, the whole line first, then the system.
+#[test]
+fn a_command_card_offers_its_argv_prefixes() {
+    let t = Target::Command(vec!["cargo".into(), "build".into(), "-p".into()]);
+    let pl = places();
+    let (me, cap) = (agent("wren"), fs_write());
+    let input = ask_input(&t, &pl, Guard::Work, &me, &cap);
+    let Offers::Grant { scopes, .. } = offers(&input, AskKind::WorkGuard) else {
+        panic!("a grant card");
+    };
+    assert_eq!(
+        scopes,
+        vec![
+            Scope::Command(vec!["cargo".into(), "build".into(), "-p".into()]),
+            Scope::Command(vec!["cargo".into(), "build".into()]),
+            Scope::Command(vec!["cargo".into()]),
+            Scope::System,
+        ]
+    );
+}
+
+/// The person's act is a confirmation: once, plus "for N" only where the descriptor allows.
+#[test]
+fn a_persons_act_card_is_a_confirmation() {
+    let t = Target::None;
+    let pl = places();
+    let (me, cap) = (agent("wren"), seat());
+    let five = 5 * 60 * 1000;
+    let input = ask_input(&t, &pl, Guard::PersonAct { max_ms: five }, &me, &cap);
+    assert_eq!(
+        offers(&input, AskKind::PersonAct),
+        Offers::Confirm {
+            for_until: Some(NOW + five)
+        }
+    );
+    let input = ask_input(&t, &pl, Guard::PersonAct { max_ms: 0 }, &me, &cap);
+    assert_eq!(
+        offers(&input, AskKind::PersonAct),
+        Offers::Confirm { for_until: None }
+    );
+    let input = ask_input(&t, &pl, Guard::PersonOnly, &me, &cap);
+    assert_eq!(
+        offers(&input, AskKind::PersonAct),
+        Offers::Confirm { for_until: None }
+    );
+}

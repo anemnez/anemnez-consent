@@ -43,3 +43,10 @@ An Ask is raised as its guard's kind of card: a confirmation for the person's ac
 <!-- claim: a-grant-lives-as-long-as-it-says -->
 A Grant applies only while its lifetime holds: its session, its task, or until its time plus the
 host's clock skew. Nothing by an unregistered name is admitted, above every Grant.
+
+<!-- claim: a-card-offers-narrowest-first -->
+A work guard's card offers the scopes that cover the call, deepest containing root first (one root
+under two names offered once, as the more particular), and the lifetimes once, task, session, then
+eight hours, shortest first. The first of each is the default, so nothing wider is ever
+pre-selected. A person's act gets a confirmation card: once, plus "for N" only where its
+descriptor's bound allows.

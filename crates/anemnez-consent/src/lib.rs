@@ -19,8 +19,10 @@
 //! - **Visibility is a separate question** ([`presence`]); a shown, denied capability is refused
 //!   and never asks.
 
+pub mod offers;
 pub mod scope;
 
+pub use offers::{OfferedLifetime, Offers, offers};
 pub use scope::{CanonPath, PathError, Place, Places, Scope, Target};
 
 /// Milliseconds since the Unix epoch. The host's clock, passed in.
